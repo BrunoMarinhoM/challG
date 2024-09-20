@@ -20,18 +20,18 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(),
+      home: const HomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _HomePageState extends State<HomePage> {
   late Future<ListOfBusiness?> business;
 
   @override
@@ -58,8 +58,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (snap.hasData && snap.data != null) {
                   final businessButtons = List<Widget>.generate(
                       snap.data!.length,
-                      (index) =>
-                          _buildMenuButton(snap.data!.getAt(index).name));
+                      (index) => _buildMenuButton(snap.data!.getAt(index)));
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: businessButtons,
@@ -70,7 +69,8 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  _buildMenuButton(String title) {
+  _buildMenuButton(Business business) {
+    var title = business.getName();
     return Container(
         width: MediaQuery.of(context).size.width,
         height: double.parse("100"),
@@ -82,7 +82,12 @@ class _MyHomePageState extends State<MyHomePage> {
               alignment: Alignment.centerLeft,
               backgroundColor: const Color(0xff2188FF),
             ),
-            onPressed: () {},
+            onPressed: () => {
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (context) => AssetsScreen(
+                            businessId: business.getId(),
+                          )))
+                },
             child: Row(children: [
               const Icon(Icons.business_rounded),
               Text(" $title Unit")
