@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
+
+enum AssetType { component, mainAsset }
 
 class Asset {
   final String id;
@@ -22,6 +25,19 @@ class Asset {
     this.sensorType,
     this.status,
   });
+
+  getAssetType() {
+    if (sensorType != null || sensorId != null) {
+      return AssetType.component;
+    }
+    return AssetType.mainAsset;
+  }
+
+  getAssetIcon() {
+    return getAssetType() == AssetType.component
+        ? Image.asset("assets/component_icon.png")
+        : Image.asset("assets/asset_icon.png");
+  }
 
   factory Asset.fromJson(Map<String, dynamic> json) {
     if (json.isEmpty || !json.containsKey("id") || !json.containsKey("name")) {

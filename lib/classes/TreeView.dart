@@ -56,10 +56,15 @@ class _TreeViewState extends State<TreeView> {
 
     if (node.children!.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.only(left: 55.0),
+        padding: const EdgeInsets.only(left: 50.0),
         child: ListTile(
-          title: Text(node.value),
-        ),
+            title: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            node.leadingIcon ?? const SizedBox(),
+            Text(" ${node.value}")
+          ]),
+        )),
       );
     }
 
@@ -67,7 +72,13 @@ class _TreeViewState extends State<TreeView> {
         padding: const EdgeInsets.only(left: 10.0),
         child: ExpansionTile(
           shape: const Border(),
-          title: Text(node.value),
+          title: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              node.leadingIcon ?? const SizedBox(),
+              Text(" ${node.value}")
+            ]),
+          ),
           initiallyExpanded: false,
           iconColor: const Color(0xaa9999aa),
           trailing: const SizedBox(),

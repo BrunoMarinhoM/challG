@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'globals/globals.dart';
 import 'classes/TreeView.dart';
 import 'classes/Assets.dart';
+import 'classes/Locations.dart';
 
 const expandChildrenOnReady = true;
 const kDebugMode = true;
@@ -93,7 +94,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
                       child: Row(
                         children: [
                           Image.asset("assets/alert_icon.png"),
-                          const Text(" Sensor de Energia"),
+                          const Text(" Crítico"),
                         ],
                       ))
                 ],
@@ -122,6 +123,23 @@ class _AssetsScreenState extends State<AssetsScreen> {
   }
 }
 
+Future<LocationsList?> fetchLocations(String businesssId) async {
+  final client = http.Client();
+  final response =
+      await client.get(Uri.http(apiUri, "companies/$businesssId/locations"));
+
+  if (response.statusCode != 200) {
+    return null;
+  }
+
+  try {
+    return LocationsList.fromJson(response.body);
+  } catch (err) {
+    throw Exception(
+        "There is something wrong with the api -> ${err.toString()}");
+  }
+}
+
 Future<ListOfAssets?> fetchAssets(String businesssId) async {
   final client = http.Client();
   final response =
@@ -139,42 +157,101 @@ Future<ListOfAssets?> fetchAssets(String businesssId) async {
   }
 }
 
+// TODO: Could've been better implemented: Way too many for loops that
+// likely did not had to exist;
+
 Future<Widget> fetchAndMountTree(String businesssId) async {
-  var rawList = await fetchAssets(businesssId);
+  var rawListOfAssets = await fetchAssets(businesssId);
+  var rawListOfLocations = await fetchLocations(businesssId);
 
-  Map<String, int> auxiliarTreeMap = {}; //
-  List<TreeViewNode> treeChildren = [];
+  Map<String, int> assetIdToListIndex = {}; //
+  Map<String, int> locationIdToListIndex = {}; //
 
-  // first populate the map
-  for (var index = 0; index < rawList!.array.length; index++) {
-    final asset = rawList.array[index];
-    auxiliarTreeMap.putIfAbsent(asset.id, () => index);
+  for (var index = 0; index < rawListOfAssets!.array.length; index++) {
+    final asset = rawListOfAssets.array[index];
+    assetIdToListIndex.putIfAbsent(asset.id, () => index);
   }
-  //propertly set the parent-child relation
-  for (var index = 0; index < rawList.array.length; index++) {
-    final asset = rawList.array[index];
+
+  for (var index = 0; index < rawListOfLocations!.array.length; index++) {
+    final location = rawListOfLocations.array[index];
+    locationIdToListIndex.putIfAbsent(location.id, () => index);
+  }
+
+  for (var asset in rawListOfAssets.array) {
     if (asset.parentId != null) {
-      final parent = rawList.array[auxiliarTreeMap[asset.parentId]!];
+      final parent = rawListOfAssets.array[assetIdToListIndex[asset.parentId]!];
       parent.subAssetsIds.add(asset.id);
+    }
+
+    if (asset.locationId != null) {
+      final location =
+          rawListOfLocations.array[locationIdToListIndex[asset.locationId]!];
+      location.subAssetsIds.add(asset.id);
     }
   }
 
-  TreeViewNode mountSubTree(Asset asset) {
+  for (var location in rawListOfLocations.array) {
+    if (location.parentId != null) {
+      final parent =
+          rawListOfLocations.array[locationIdToListIndex[location.parentId]!];
+      parent.subLocationsIds.add(location.id);
+    }
+  }
+
+  //auxiliar Sub-Function
+  TreeViewNode mountSubTreeOfAssets(Asset asset) {
     if (asset.subAssetsIds.isEmpty) {
-      return TreeViewNode(value: asset.name);
+      return TreeViewNode(value: asset.name, leadingIcon: asset.getAssetIcon());
     }
 
     List<TreeViewNode> children = [];
 
     for (var subassetId in asset.subAssetsIds) {
-      children.add(mountSubTree(rawList.array[auxiliarTreeMap[subassetId]!]));
+      children.add(mountSubTreeOfAssets(
+          rawListOfAssets.array[assetIdToListIndex[subassetId]!]));
     }
-    return TreeViewNode(value: asset.name, children: children);
+    return TreeViewNode(
+        value: asset.name,
+        children: children,
+        leadingIcon: asset.getAssetIcon());
   }
 
-  for (var asset in rawList.array) {
-    if (asset.parentId == null) {
-      gTreeChildren.add(mountSubTree(asset));
+  for (var asset in rawListOfAssets.array) {
+    if (asset.parentId == null && asset.locationId == null) {
+      gTreeChildren.add(mountSubTreeOfAssets(asset));
+    }
+  }
+
+  //auxiliar Sub-Function
+  TreeViewNode mountSubTreeFromLocation(Location location) {
+    if (location.subLocationsIds.isEmpty && location.subAssetsIds.isEmpty) {
+      return TreeViewNode(
+          value: location.name,
+          leadingIcon: Image.asset("assets/location_icon.png"));
+    }
+
+    List<TreeViewNode> children = [];
+
+    for (var subLocationId in location.subLocationsIds) {
+      children.add(mountSubTreeFromLocation(
+          rawListOfLocations.array[locationIdToListIndex[subLocationId]!]));
+    }
+
+    for (var subAssetId in location.subAssetsIds) {
+      print("aquiii;");
+      children.add(mountSubTreeOfAssets(
+          rawListOfAssets.array[assetIdToListIndex[subAssetId]!]));
+    }
+
+    return TreeViewNode(
+        value: location.name,
+        children: children,
+        leadingIcon: Image.asset("assets/location_icon.png"));
+  }
+
+  for (var location in rawListOfLocations.array) {
+    if (location.parentId == null) {
+      gTreeChildren.add(mountSubTreeFromLocation(location));
     }
   }
 
