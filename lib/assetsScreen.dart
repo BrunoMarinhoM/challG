@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'globals/globals.dart';
@@ -20,7 +20,7 @@ class AssetsScreen extends StatefulWidget {
 
 class _AssetsScreenState extends State<AssetsScreen> {
   late Future<ListOfAssets?> listOfAssets;
-  late Future<TreeViewNode> mountedTree;
+  late Future<Widget> mountedTree;
 
   @override
   void initState() {
@@ -112,10 +112,9 @@ class _AssetsScreenState extends State<AssetsScreen> {
               builder: (context, snap) {
                 if (snap.hasData && snap.data != null) {
                   return SizedBox(
-                      height: 3 * (MediaQuery.of(context).size.height) / 4,
-                      child: SingleChildScrollView(
-                        child: TreeView(rootNode: snap.data!),
-                      ));
+                    height: 3 * (MediaQuery.of(context).size.height) / 4,
+                    child: snap.data!,
+                  );
                 }
                 return const CircularProgressIndicator();
               }),
@@ -140,11 +139,7 @@ Future<ListOfAssets?> fetchAssets(String businesssId) async {
   }
 }
 
-Future<TreeViewNode> fetchAndMountTree(String businessId) async {
-  return await compute(_fetchAndMountTree, businessId);
-}
-
-Future<TreeViewNode> _fetchAndMountTree(String businesssId) async {
+Future<Widget> fetchAndMountTree(String businesssId) async {
   var rawList = await fetchAssets(businesssId);
 
   Map<String, int> auxiliarTreeMap = {}; //
@@ -155,7 +150,6 @@ Future<TreeViewNode> _fetchAndMountTree(String businesssId) async {
     final asset = rawList.array[index];
     auxiliarTreeMap.putIfAbsent(asset.id, () => index);
   }
-
   //propertly set the parent-child relation
   for (var index = 0; index < rawList.array.length; index++) {
     final asset = rawList.array[index];
@@ -167,7 +161,6 @@ Future<TreeViewNode> _fetchAndMountTree(String businesssId) async {
 
   TreeViewNode mountSubTree(Asset asset) {
     if (asset.subAssetsIds.isEmpty) {
-      print("done in here");
       return TreeViewNode(value: asset.name);
     }
 
@@ -181,11 +174,10 @@ Future<TreeViewNode> _fetchAndMountTree(String businesssId) async {
 
   for (var asset in rawList.array) {
     if (asset.parentId == null) {
-      var argument = await compute(mountSubTree, asset);
-      gTreeChildren.add(argument);
+      gTreeChildren.add(mountSubTree(asset));
     }
   }
 
-  return TreeViewNode(
-      value: "all assets", children: gTreeChildren, isRoot: true);
+  return TreeView(
+      rootNode: TreeViewNode(children: gTreeChildren, isRoot: true));
 }

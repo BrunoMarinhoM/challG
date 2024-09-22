@@ -27,51 +27,57 @@ class TreeView extends StatefulWidget {
 }
 
 class _TreeViewState extends State<TreeView> {
-  Widget getNodeArrowWidget(TreeViewNode node) {
-    return node.isExpanded
-        ? const Icon(Icons.arrow_drop_down)
-        : const Icon(Icons.arrow_drop_up);
-  }
-
-  Widget buildTree(TreeViewNode node) {
-    node.children = node.children ?? [];
-
-    if (node.isRoot) {
-      return Column(
-        children: node.children!.map(buildTree).toList(),
-      );
-    }
-
-    if (node.children!.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 55.0),
-        child: ListTile(
-          title: Text(node.value),
-        ),
-      );
-    }
-
-    return Padding(
-        padding: const EdgeInsets.only(left: 10.0),
-        child: Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              title: Text(node.value),
-              initiallyExpanded: false,
-              iconColor: const Color(0xaa9999aa),
-              trailing: const SizedBox(),
-              leading: getNodeArrowWidget(node),
-              collapsedIconColor: const Color(0xaa9999aa),
-              backgroundColor: node.backgroundColor,
-              children: node.children!.map(buildTree).toList(),
-              onExpansionChanged: (value) {
-                node.isExpanded = value;
-              },
-            )));
-  }
-
   @override
   Widget build(BuildContext context) {
     return buildTree(widget.rootNode);
   }
+}
+
+Widget getNodeArrowWidget(TreeViewNode node) {
+  return node.isExpanded
+      ? const Icon(Icons.arrow_drop_down)
+      : const Icon(Icons.arrow_drop_up);
+}
+
+Widget buildTree(TreeViewNode rootNode) {
+  if (!rootNode.isRoot) {
+    return const SizedBox();
+  }
+  return ListView.builder(
+    shrinkWrap: true,
+    itemCount: rootNode.children!.length,
+    itemBuilder: (context, index) {
+      return _buildTree(rootNode.children![index]);
+    },
+  );
+}
+
+Widget _buildTree(TreeViewNode node) {
+  node.children = node.children ?? [];
+
+  if (node.children!.isEmpty) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 55.0),
+      child: ListTile(
+        title: Text(node.value),
+      ),
+    );
+  }
+
+  return Padding(
+      padding: const EdgeInsets.only(left: 10.0),
+      child: ExpansionTile(
+        shape: const Border(),
+        title: Text(node.value),
+        initiallyExpanded: false,
+        iconColor: const Color(0xaa9999aa),
+        trailing: const SizedBox(),
+        leading: getNodeArrowWidget(node),
+        collapsedIconColor: const Color(0xaa9999aa),
+        backgroundColor: node.backgroundColor,
+        children: node.children!.map(_buildTree).toList(),
+        onExpansionChanged: (value) {
+          node.isExpanded = value;
+        },
+      ));
 }
