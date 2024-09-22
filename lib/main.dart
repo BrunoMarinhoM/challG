@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:tets/treeview.dart';
 import '../globals/globals.dart';
 import '../classes/Business.dart';
 import '../assetsScreen.dart';
@@ -43,8 +42,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    var root =
-        TreeViewNode(value: "valor", children: [TreeViewNode(value: "valor2")]);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xff17192D),

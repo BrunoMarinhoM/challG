@@ -8,7 +8,6 @@ import 'classes/Assets.dart';
 const expandChildrenOnReady = true;
 const kDebugMode = true;
 List<TreeViewNode> gTreeChildren = [];
-var gTree = TreeViewNode(value: "All assets", children: gTreeChildren);
 
 class AssetsScreen extends StatefulWidget {
   const AssetsScreen({super.key, required this.businessId});
@@ -26,13 +25,14 @@ class _AssetsScreenState extends State<AssetsScreen> {
   @override
   void initState() {
     super.initState();
-    gTree = TreeViewNode(value: "All assets");
     mountedTree = fetchAndMountTree(widget.businessId);
+    gTreeChildren = [];
   }
 
   @override
   void dispose() {
     super.dispose();
+    gTreeChildren = [];
   }
 
   @override
@@ -112,17 +112,14 @@ class _AssetsScreenState extends State<AssetsScreen> {
               builder: (context, snap) {
                 if (snap.hasData && snap.data != null) {
                   return SizedBox(
-                    height: 3 * (MediaQuery.of(context).size.height) / 4,
-                    child: TreeView(root: snap.data!),
-                  );
+                      height: 3 * (MediaQuery.of(context).size.height) / 4,
+                      child: SingleChildScrollView(
+                        child: TreeView(rootNode: snap.data!),
+                      ));
                 }
                 return const CircularProgressIndicator();
               }),
-        ])
-        //     ,
-        //   ],
-        // ),
-        );
+        ]));
   }
 }
 
@@ -136,14 +133,18 @@ Future<ListOfAssets?> fetchAssets(String businesssId) async {
   }
 
   try {
-    return await compute(ListOfAssets.fromJson, response.body);
+    return ListOfAssets.fromJson(response.body);
   } catch (err) {
     throw Exception(
         "There is something wrong with the api -> ${err.toString()}");
   }
 }
 
-Future<TreeViewNode> fetchAndMountTree(String businesssId) async {
+Future<TreeViewNode> fetchAndMountTree(String businessId) async {
+  return await compute(_fetchAndMountTree, businessId);
+}
+
+Future<TreeViewNode> _fetchAndMountTree(String businesssId) async {
   var rawList = await fetchAssets(businesssId);
 
   Map<String, int> auxiliarTreeMap = {}; //
@@ -166,6 +167,7 @@ Future<TreeViewNode> fetchAndMountTree(String businesssId) async {
 
   TreeViewNode mountSubTree(Asset asset) {
     if (asset.subAssetsIds.isEmpty) {
+      print("done in here");
       return TreeViewNode(value: asset.name);
     }
 
@@ -177,13 +179,13 @@ Future<TreeViewNode> fetchAndMountTree(String businesssId) async {
     return TreeViewNode(value: asset.name, children: children);
   }
 
-  var index = 0;
-  while (index < rawList.array.length) {
-    if (rawList.array[index].parentId == null) {
-      gTreeChildren.add(mountSubTree(rawList.array[index]));
+  for (var asset in rawList.array) {
+    if (asset.parentId == null) {
+      var argument = await compute(mountSubTree, asset);
+      gTreeChildren.add(argument);
     }
-    index++;
   }
 
-  return TreeViewNode(value: "all assets", children: gTreeChildren);
+  return TreeViewNode(
+      value: "all assets", children: gTreeChildren, isRoot: true);
 }
