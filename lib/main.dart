@@ -97,12 +97,7 @@ class _HomePageState extends State<HomePage> {
   Future<ListOfBusiness?> fetchBusiness() async {
     var client = http.Client();
 
-    final http.Response response;
-    try {
-      response = await client.get(Uri.http(apiUri, "companies"));
-    } catch (err) {
-      return ListOfBusiness(list: [], length: 0);
-    }
+    final response = await client.get(Uri.http(apiUri, "companies"));
 
     if (response.statusCode != 200) {
       return null;
