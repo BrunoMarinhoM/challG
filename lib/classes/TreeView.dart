@@ -19,8 +19,8 @@ class TreeViewNode {
 }
 
 class TreeView extends StatefulWidget {
-  final TreeViewNode rootNode;
-  const TreeView({super.key, required this.rootNode});
+  TreeViewNode rootNode;
+  TreeView({super.key, required this.rootNode});
 
   @override
   State<StatefulWidget> createState() => _TreeViewState();

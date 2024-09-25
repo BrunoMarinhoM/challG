@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
-enum AssetType { component, mainAsset }
+enum AssetType { componentOrSensor, mainAsset }
+
+enum AssetStatus { operating, alert }
 
 class Asset {
   final String id;
@@ -28,13 +30,21 @@ class Asset {
 
   getAssetType() {
     if (sensorType != null || sensorId != null) {
-      return AssetType.component;
+      return AssetType.componentOrSensor;
     }
     return AssetType.mainAsset;
   }
 
+  getAssetStatus() {
+    if (getAssetType() == AssetType.mainAsset) {
+      return null;
+    }
+
+    return status == "alert" ? AssetStatus.alert : AssetStatus.operating;
+  }
+
   getAssetIcon() {
-    return getAssetType() == AssetType.component
+    return getAssetType() == AssetType.componentOrSensor
         ? Image.asset("assets/component_icon.png")
         : Image.asset("assets/asset_icon.png");
   }
