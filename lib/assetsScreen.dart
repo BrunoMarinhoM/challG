@@ -16,7 +16,6 @@ late bool onlyCriticalSensors;
 
 class AssetsScreen extends StatefulWidget {
   const AssetsScreen({super.key, required this.businessId});
-
   final String businessId;
 
   @override
@@ -42,30 +41,6 @@ class _AssetsScreenState extends State<AssetsScreen> {
   }
 
   //TODO: Open all nodes in search:
-  List<String> getMatchesOnListOfNames(String query) {
-    query = query.toLowerCase();
-    return searchList
-        .where((element) => element.toLowerCase().contains(query))
-        .toList();
-  }
-
-  bool isNodeNameOnSubTree(String name, TreeViewNode node) {
-    if (node.value == name) {
-      return true;
-    }
-    if (node.children == null) {
-      return false;
-    }
-
-    for (var subNode in node.children!) {
-      if (isNodeNameOnSubTree(name, subNode)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   List<TreeViewNode> getMatchNodesOnMainTree(String query) {
     List<TreeViewNode> queryResult = [];
     for (var childNode in gTreeChildren) {
@@ -234,6 +209,30 @@ Future<ListOfAssets?> fetchAssets(String businesssId) async {
   }
 }
 
+List<String> getMatchesOnListOfNames(String query) {
+  query = query.toLowerCase();
+  return searchList
+      .where((element) => element.toLowerCase().contains(query))
+      .toList();
+}
+
+bool isNodeNameOnSubTree(String name, TreeViewNode node) {
+  if (node.value == name) {
+    return true;
+  }
+  if (node.children == null) {
+    return false;
+  }
+
+  for (var subNode in node.children!) {
+    if (isNodeNameOnSubTree(name, subNode)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // TODO: Could've been better implemented: Way too many for loops that
 // likely did not had to exist;
 Future<bool> fetchIfNullAndMountTree(String businesssId) async {
@@ -306,6 +305,45 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
         leadingIcon: asset.getAssetIcon());
   }
 
+  //auxiliar function
+  bool isCriticalSensorOnSubTreeOfAssets(Asset asset) {
+    if (asset.getAssetStatus() == AssetStatus.alert) {
+      return true;
+    }
+    if (asset.subAssetsIds.isEmpty) {
+      return false;
+    }
+
+    for (var subAssetId in asset.subAssetsIds) {
+      if (isCriticalSensorOnSubTreeOfAssets(
+          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool isCriticalSensorOnSubTreeOfLocations(Location location) {
+    if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
+      return false;
+    }
+
+    for (var subLocationId in location.subLocationsIds) {
+      if (isCriticalSensorOnSubTreeOfLocations(
+          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!])) {
+        return true;
+      }
+    }
+
+    for (var subAssetId in location.subAssetsIds) {
+      if (isCriticalSensorOnSubTreeOfAssets(
+          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   //auxiliar Sub-Function
   TreeViewNode mountSubTreeFromLocation(Location location) {
     if (location.subLocationsIds.isEmpty && location.subAssetsIds.isEmpty) {
@@ -317,8 +355,15 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
     List<TreeViewNode> children = [];
 
     for (var subLocationId in location.subLocationsIds) {
-      children.add(mountSubTreeFromLocation(
-          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!]));
+      var _location =
+          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!];
+      if ((!onlyCriticalSensors) ||
+          (onlyCriticalSensors &&
+              isCriticalSensorOnSubTreeOfLocations(_location))) {
+        var subTree = mountSubTreeFromLocation(_location);
+
+        children.add(subTree);
+      }
     }
 
     for (var subAssetId in location.subAssetsIds) {
@@ -327,7 +372,6 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
       if (subTree == null) {
         continue;
       }
-
       children.add(subTree);
     }
 
@@ -339,7 +383,11 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
 
   for (var location in rawListOfLocations!.array) {
     if (location.parentId == null) {
-      gTreeChildren.add(mountSubTreeFromLocation(location));
+      if ((!onlyCriticalSensors) ||
+          (onlyCriticalSensors &&
+              isCriticalSensorOnSubTreeOfLocations(location))) {
+        gTreeChildren.add(mountSubTreeFromLocation(location));
+      }
     }
   }
 
