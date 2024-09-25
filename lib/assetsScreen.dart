@@ -118,10 +118,22 @@ class _AssetsScreenState extends State<AssetsScreen> {
                   SizedBox(
                       height: 40,
                       child: OutlinedButton(
-                        onPressed: () {},
+                        onPressed: () async {
+                          onlyEnergySensors = !onlyEnergySensors;
+                          gTreeChildren = [];
+                          setState(() {});
+                          await fetchIfNullAndMountTree(widget.businessId);
+                          setState(() {});
+                          return;
+                        },
                         style: underSearchBarButtonStyle,
                         child: Row(children: [
-                          Image.asset("assets/energy_icon.png"),
+                          Image.asset(
+                            "assets/energy_icon.png",
+                            color: onlyEnergySensors
+                                ? const Color(0xffffff00)
+                                : null,
+                          ),
                           const Text(" Sensor de Energia"),
                         ]),
                       )),
@@ -141,7 +153,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
                           Image.asset(
                             "assets/alert_icon.png",
                             color: onlyCriticalSensors
-                                ? const Color(0xaaaa0000)
+                                ? const Color(0xffff0000)
                                 : null,
                           ),
                           const Text(" Crítico"),
@@ -278,9 +290,12 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
 
   //auxiliar Sub-Function
   TreeViewNode? mountSubTreeOfAssets(Asset asset) {
-    if (asset.subAssetsIds.isEmpty &&
-        onlyCriticalSensors &&
-        asset.getAssetStatus() != AssetStatus.alert) {
+    if ((asset.subAssetsIds.isEmpty &&
+            onlyCriticalSensors &&
+            asset.getAssetStatus() != AssetStatus.alert) ||
+        asset.subAssetsIds.isEmpty &&
+            onlyEnergySensors &&
+            asset.sensorType != "energy") {
       return null;
     }
 
@@ -303,6 +318,48 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
         value: asset.name,
         children: children,
         leadingIcon: asset.getAssetIcon());
+  }
+
+  //auxiliar function
+  bool isEnergySensorOnSubTreeOfAssets(Asset asset) {
+    if (asset.sensorType == "energy") {
+      return true;
+    }
+
+    if (asset.subAssetsIds.isEmpty) {
+      return false;
+    }
+
+    for (var subAssetId in asset.subAssetsIds) {
+      if (isEnergySensorOnSubTreeOfAssets(
+          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool isEnergySensorOnSubTreeOfLocations(Location location) {
+    if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
+      return false;
+    }
+
+    for (var subLocationId in location.subLocationsIds) {
+      if (isEnergySensorOnSubTreeOfLocations(
+          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!])) {
+        return true;
+      }
+    }
+
+    for (var subAssetId in location.subAssetsIds) {
+      if (isEnergySensorOnSubTreeOfAssets(
+          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   //auxiliar function
@@ -360,9 +417,12 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
       if ((!onlyCriticalSensors) ||
           (onlyCriticalSensors &&
               isCriticalSensorOnSubTreeOfLocations(_location))) {
-        var subTree = mountSubTreeFromLocation(_location);
-
-        children.add(subTree);
+        if ((!onlyEnergySensors) ||
+            (onlyEnergySensors &&
+                isEnergySensorOnSubTreeOfLocations(_location))) {
+          var subTree = mountSubTreeFromLocation(_location);
+          children.add(subTree);
+        }
       }
     }
 
@@ -386,7 +446,11 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
       if ((!onlyCriticalSensors) ||
           (onlyCriticalSensors &&
               isCriticalSensorOnSubTreeOfLocations(location))) {
-        gTreeChildren.add(mountSubTreeFromLocation(location));
+        if ((!onlyEnergySensors) ||
+            (onlyEnergySensors &&
+                isEnergySensorOnSubTreeOfLocations(location))) {
+          gTreeChildren.add(mountSubTreeFromLocation(location));
+        }
       }
     }
   }
