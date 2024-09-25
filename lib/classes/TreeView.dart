@@ -14,7 +14,7 @@ class TreeViewNode {
     this.leadingIcon,
     this.isRoot = false,
     this.backgroundColor = const Color(0xffffffff),
-    this.isExpanded = false,
+    this.isExpanded = true, //to better displaying on demo video
   });
 }
 
@@ -79,7 +79,7 @@ class _TreeViewState extends State<TreeView> {
               Text(" ${node.value}")
             ]),
           ),
-          initiallyExpanded: false,
+          initiallyExpanded: node.isExpanded,
           iconColor: const Color(0xaa9999aa),
           trailing: const SizedBox(),
           leading: getNodeArrowWidget(node),

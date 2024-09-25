@@ -308,7 +308,9 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
     for (var subassetId in asset.subAssetsIds) {
       var subTree = mountSubTreeOfAssets(
           rawListOfAssets!.array[assetIdToListIndex[subassetId]!]);
-      if (subTree == null) {
+      if (subTree == null ||
+          isNodeNameOnSubTree(
+              subTree.value, TreeViewNode(children: children))) {
         continue;
       }
       children.add(subTree);
@@ -429,7 +431,9 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
     for (var subAssetId in location.subAssetsIds) {
       var subTree = mountSubTreeOfAssets(
           rawListOfAssets!.array[assetIdToListIndex[subAssetId]!]);
-      if (subTree == null) {
+      if (subTree == null ||
+          isNodeNameOnSubTree(
+              subTree.value, TreeViewNode(children: children))) {
         continue;
       }
       children.add(subTree);
