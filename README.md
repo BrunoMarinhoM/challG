@@ -1,6 +1,6 @@
-Demo 
-![](https://github.com/BrunoMarinhoM/challG/blob/main/assets/Demo.gif)
+Demo:
 
+<img src="https://github.com/BrunoMarinhoM/challG/blob/main/assets/Demo.gif " width="360" height="800"/>
 
 
 Ensure proper versioning:
@@ -15,3 +15,6 @@ Then it is just In the root directory run
 ```
 flutter run --release
 ```
+
+Note:
+There is some small frame loss in the big-list fetched from the API that can be solved in a relative easy manner using Isolates, though the time had just caught up;
