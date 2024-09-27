@@ -14,7 +14,7 @@ class TreeViewNode {
     this.leadingIcon,
     this.isRoot = false,
     this.backgroundColor = const Color(0xffffffff),
-    this.isExpanded = true, //to better displaying on demo video
+    this.isExpanded = false,
   });
 }
 
@@ -42,8 +42,10 @@ class _TreeViewState extends State<TreeView> {
     if (!rootNode.isRoot) {
       return const SizedBox();
     }
+
     return ListView.builder(
-      shrinkWrap: true,
+      primary: false,
+      shrinkWrap: false,
       itemCount: rootNode.children!.length,
       itemBuilder: (context, index) {
         return _buildTree(rootNode.children![index]);

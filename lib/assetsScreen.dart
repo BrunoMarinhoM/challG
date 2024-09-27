@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -8,10 +9,14 @@ import 'classes/Locations.dart';
 
 List<TreeViewNode> gTreeChildren = [];
 List<String> searchList = [];
+List<TreeViewNode> searchResults = [];
+List<String> searchMatchedNames = [];
+bool searching = false;
 late Future<bool> isTreeMounted;
 late ListOfAssets? rawListOfAssets;
 late LocationsList? rawListOfLocations;
 late bool onlyEnergySensors;
+late bool forceShowLoading;
 late bool onlyCriticalSensors;
 
 class AssetsScreen extends StatefulWidget {
@@ -29,10 +34,14 @@ class _AssetsScreenState extends State<AssetsScreen> {
     rawListOfAssets = null;
     rawListOfLocations = null;
     isTreeMounted = fetchIfNullAndMountTree(widget.businessId);
+    forceShowLoading = false;
     gTreeChildren = [];
+    searchResults = [];
+    searchMatchedNames = [];
     onlyEnergySensors = false;
     onlyCriticalSensors = false;
     searchList = [];
+    searching = false;
   }
 
   @override
@@ -49,6 +58,46 @@ class _AssetsScreenState extends State<AssetsScreen> {
       }
     }
     return queryResult;
+  }
+
+  void cleanSearchResultsTreeView() {
+    String? getNameAssociatedWithSearchedNoded(TreeViewNode node) {
+      for (var name in searchMatchedNames) {
+        if (isNodeNameOnSubTree(name, node)) {
+          return name;
+        }
+      }
+      return null;
+    }
+
+    for (var node in searchResults) {
+      _cleanSubTree(node, getNameAssociatedWithSearchedNoded(node)!);
+    }
+    return;
+  }
+
+  void _cleanSubTree(TreeViewNode node, String name) {
+    if (node.value == name) {
+      return;
+    }
+    if (!isNodeNameOnSubTree(name, node) || node.children == null) {
+      throw Exception("Invalid Tree to be cleaned");
+    }
+    if (node.children!.isEmpty) {
+      throw Exception("Invalid Tree to be cleaned");
+    }
+
+    final children = List<TreeViewNode>.from(node.children!);
+    for (var (index, child) in node.children!.indexed) {
+      if (!isNodeNameOnSubTree(name, child)) {
+        children.removeAt(index);
+      }
+    }
+    node.children = children;
+
+    for (var childNode in node.children!) {
+      _cleanSubTree(childNode, name);
+    }
   }
 
   @override
@@ -81,15 +130,17 @@ class _AssetsScreenState extends State<AssetsScreen> {
                   child: SearchBar(
                     onChanged: (query) async {
                       if (query == "") {
-                        await fetchIfNullAndMountTree(widget.businessId);
+                        searching = false;
                         setState(() {});
                         return;
                       }
+                      searching = true;
+                      setState(() {});
 
-                      final queryResults = getMatchesOnListOfNames(query);
-
-                      if (queryResults.isEmpty) {
-                        gTreeChildren = [
+                      searchMatchedNames = getMatchesOnListOfNames(query);
+                      searchResults = [];
+                      if (searchMatchedNames.isEmpty) {
+                        searchResults = [
                           TreeViewNode(
                               isRoot: false,
                               value: "Nem um resultado encontrado")
@@ -98,7 +149,13 @@ class _AssetsScreenState extends State<AssetsScreen> {
                         return;
                       }
 
-                      gTreeChildren = getMatchNodesOnMainTree(queryResults[0]);
+                      for (var queryResult in searchMatchedNames) {
+                        searchResults
+                            .addAll(getMatchNodesOnMainTree(queryResult));
+                      }
+
+                      cleanSearchResultsTreeView();
+
                       setState(() {});
                     },
                     elevation: MaterialStateProperty.all<double>(0),
@@ -121,8 +178,10 @@ class _AssetsScreenState extends State<AssetsScreen> {
                         onPressed: () async {
                           onlyEnergySensors = !onlyEnergySensors;
                           gTreeChildren = [];
+                          forceShowLoading = true;
                           setState(() {});
                           await fetchIfNullAndMountTree(widget.businessId);
+                          forceShowLoading = false;
                           setState(() {});
                           return;
                         },
@@ -142,8 +201,10 @@ class _AssetsScreenState extends State<AssetsScreen> {
                       onPressed: () async {
                         onlyCriticalSensors = !onlyCriticalSensors;
                         gTreeChildren = [];
+                        forceShowLoading = true;
                         setState(() {});
                         await fetchIfNullAndMountTree(widget.businessId);
+                        forceShowLoading = false;
                         setState(() {});
                         return;
                       },
@@ -174,6 +235,17 @@ class _AssetsScreenState extends State<AssetsScreen> {
               future: isTreeMounted,
               builder: (context, snap) {
                 if (snap.hasData && snap.data != null) {
+                  if (forceShowLoading) {
+                    return const CircularProgressIndicator();
+                  }
+                  if (searching) {
+                    return SizedBox(
+                      height: 3 * (MediaQuery.of(context).size.height) / 4,
+                      child: TreeView(
+                          rootNode: TreeViewNode(
+                              children: searchResults, isRoot: true)),
+                    );
+                  }
                   return SizedBox(
                     height: 3 * (MediaQuery.of(context).size.height) / 4,
                     child: TreeView(
@@ -248,21 +320,31 @@ bool isNodeNameOnSubTree(String name, TreeViewNode node) {
 // TODO: Could've been better implemented: Way too many for loops that
 // likely did not had to exist;
 Future<bool> fetchIfNullAndMountTree(String businesssId) async {
-  rawListOfAssets = rawListOfAssets ?? await fetchAssets(businesssId);
-  rawListOfLocations = rawListOfLocations ?? await fetchLocations(businesssId);
+  try {
+    rawListOfAssets =
+        rawListOfAssets ?? await Isolate.run(() => fetchAssets(businesssId));
+    rawListOfLocations = rawListOfLocations ??
+        await Isolate.run(() => fetchLocations(businesssId));
+  } catch (_) {
+    return false;
+  }
 
   Map<String, int> assetIdToListIndex = {}; //
   Map<String, int> locationIdToListIndex = {}; //
 
   for (var index = 0; index < rawListOfAssets!.array.length; index++) {
     final asset = rawListOfAssets!.array[index];
-    searchList.add(asset.name);
+    if (!searchList.contains(asset.name)) {
+      searchList.add(asset.name);
+    }
     assetIdToListIndex.putIfAbsent(asset.id, () => index);
   }
 
   for (var index = 0; index < rawListOfLocations!.array.length; index++) {
     final location = rawListOfLocations!.array[index];
-    searchList.add(location.name);
+    if (searchList.contains(location.name)) {
+      searchList.add(location.name);
+    }
     locationIdToListIndex.putIfAbsent(location.id, () => index);
   }
 
@@ -270,13 +352,17 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
     if (asset.parentId != null) {
       final parent =
           rawListOfAssets!.array[assetIdToListIndex[asset.parentId]!];
-      parent.subAssetsIds.add(asset.id);
+      if (!parent.subAssetsIds.contains(asset.id)) {
+        parent.subAssetsIds.add(asset.id);
+      }
     }
 
     if (asset.locationId != null) {
       final location =
           rawListOfLocations!.array[locationIdToListIndex[asset.locationId]!];
-      location.subAssetsIds.add(asset.id);
+      if (!location.subAssetsIds.contains(asset.id)) {
+        location.subAssetsIds.add(asset.id);
+      }
     }
   }
 
@@ -284,187 +370,38 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
     if (location.parentId != null) {
       final parent =
           rawListOfLocations!.array[locationIdToListIndex[location.parentId]!];
-      parent.subLocationsIds.add(location.id);
-    }
-  }
-
-  //auxiliar Sub-Function
-  TreeViewNode? mountSubTreeOfAssets(Asset asset) {
-    if ((asset.subAssetsIds.isEmpty &&
-            onlyCriticalSensors &&
-            asset.getAssetStatus() != AssetStatus.alert) ||
-        asset.subAssetsIds.isEmpty &&
-            onlyEnergySensors &&
-            asset.sensorType != "energy") {
-      return null;
-    }
-
-    if (asset.subAssetsIds.isEmpty) {
-      return TreeViewNode(value: asset.name, leadingIcon: asset.getAssetIcon());
-    }
-
-    List<TreeViewNode> children = [];
-
-    for (var subassetId in asset.subAssetsIds) {
-      var subTree = mountSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subassetId]!]);
-      if (subTree == null ||
-          isNodeNameOnSubTree(
-              subTree.value, TreeViewNode(children: children))) {
-        continue;
-      }
-      children.add(subTree);
-    }
-
-    return TreeViewNode(
-        value: asset.name,
-        children: children,
-        leadingIcon: asset.getAssetIcon());
-  }
-
-  //auxiliar function
-  bool isEnergySensorOnSubTreeOfAssets(Asset asset) {
-    if (asset.sensorType == "energy") {
-      return true;
-    }
-
-    if (asset.subAssetsIds.isEmpty) {
-      return false;
-    }
-
-    for (var subAssetId in asset.subAssetsIds) {
-      if (isEnergySensorOnSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
-        return true;
+      if (!parent.subLocationsIds.contains(location.id)) {
+        parent.subLocationsIds.add(location.id);
       }
     }
-
-    return false;
-  }
-
-  bool isEnergySensorOnSubTreeOfLocations(Location location) {
-    if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
-      return false;
-    }
-
-    for (var subLocationId in location.subLocationsIds) {
-      if (isEnergySensorOnSubTreeOfLocations(
-          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!])) {
-        return true;
-      }
-    }
-
-    for (var subAssetId in location.subAssetsIds) {
-      if (isEnergySensorOnSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  //auxiliar function
-  bool isCriticalSensorOnSubTreeOfAssets(Asset asset) {
-    if (asset.getAssetStatus() == AssetStatus.alert) {
-      return true;
-    }
-    if (asset.subAssetsIds.isEmpty) {
-      return false;
-    }
-
-    for (var subAssetId in asset.subAssetsIds) {
-      if (isCriticalSensorOnSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool isCriticalSensorOnSubTreeOfLocations(Location location) {
-    if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
-      return false;
-    }
-
-    for (var subLocationId in location.subLocationsIds) {
-      if (isCriticalSensorOnSubTreeOfLocations(
-          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!])) {
-        return true;
-      }
-    }
-
-    for (var subAssetId in location.subAssetsIds) {
-      if (isCriticalSensorOnSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!])) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  //auxiliar Sub-Function
-  TreeViewNode mountSubTreeFromLocation(Location location) {
-    if (location.subLocationsIds.isEmpty && location.subAssetsIds.isEmpty) {
-      return TreeViewNode(
-          value: location.name,
-          leadingIcon: Image.asset("assets/location_icon.png"));
-    }
-
-    List<TreeViewNode> children = [];
-
-    for (var subLocationId in location.subLocationsIds) {
-      var _location =
-          rawListOfLocations!.array[locationIdToListIndex[subLocationId]!];
-      if ((!onlyCriticalSensors) ||
-          (onlyCriticalSensors &&
-              isCriticalSensorOnSubTreeOfLocations(_location))) {
-        if ((!onlyEnergySensors) ||
-            (onlyEnergySensors &&
-                isEnergySensorOnSubTreeOfLocations(_location))) {
-          var subTree = mountSubTreeFromLocation(_location);
-          children.add(subTree);
-        }
-      }
-    }
-
-    for (var subAssetId in location.subAssetsIds) {
-      var subTree = mountSubTreeOfAssets(
-          rawListOfAssets!.array[assetIdToListIndex[subAssetId]!]);
-      if (subTree == null ||
-          isNodeNameOnSubTree(
-              subTree.value, TreeViewNode(children: children))) {
-        continue;
-      }
-      children.add(subTree);
-    }
-
-    return TreeViewNode(
-        value: location.name,
-        children: children,
-        leadingIcon: Image.asset("assets/location_icon.png"));
   }
 
   for (var location in rawListOfLocations!.array) {
     if (location.parentId == null) {
-      if ((!onlyCriticalSensors) ||
-          (onlyCriticalSensors &&
-              isCriticalSensorOnSubTreeOfLocations(location))) {
-        if ((!onlyEnergySensors) ||
-            (onlyEnergySensors &&
-                isEnergySensorOnSubTreeOfLocations(location))) {
-          gTreeChildren.add(mountSubTreeFromLocation(location));
+      if (((!onlyCriticalSensors) ||
+              (onlyCriticalSensors &&
+                  isCriticalSensorOnSubTreeOfLocations(
+                      location, locationIdToListIndex, assetIdToListIndex))) &&
+          ((!onlyEnergySensors) ||
+              (onlyEnergySensors &&
+                  isEnergySensorOnSubTreeOfLocations(
+                      location, assetIdToListIndex, locationIdToListIndex)))) {
+        final locationSubTree = mountSubTreeFromLocation(
+            location, locationIdToListIndex, assetIdToListIndex);
+        if (locationSubTree.children == null) {
+          continue;
         }
+        if (locationSubTree.children!.isEmpty) {
+          continue;
+        }
+        gTreeChildren.add(locationSubTree);
       }
     }
   }
 
-  //Prevent from losing a couple of frames before tree rendering
-  gTreeChildren = await Isolate.run(gTreeChildren.reversed.toList);
-
   for (var asset in rawListOfAssets!.array) {
     if (asset.parentId == null && asset.locationId == null) {
-      var subTree = mountSubTreeOfAssets(asset);
+      var subTree = mountSubTreeOfAssets(asset, assetIdToListIndex);
       if (subTree == null) {
         continue;
       }
@@ -473,4 +410,184 @@ Future<bool> fetchIfNullAndMountTree(String businesssId) async {
   }
 
   return true;
+}
+
+bool isEnergySensorOnSubTreeOfAssets(
+    Asset asset, Map<String, int> assetIdToListIndex) {
+  if (asset.sensorType == "energy") {
+    return true;
+  }
+
+  if (asset.subAssetsIds.isEmpty) {
+    return false;
+  }
+
+  for (var subAssetId in asset.subAssetsIds) {
+    if (isEnergySensorOnSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subAssetId]!],
+        assetIdToListIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool isEnergySensorOnSubTreeOfLocations(
+    Location location,
+    Map<String, int> assetIdToListIndex,
+    Map<String, int> locationIdToListIndex) {
+  if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
+    return false;
+  }
+
+  for (var subLocationId in location.subLocationsIds) {
+    if (isEnergySensorOnSubTreeOfLocations(
+        rawListOfLocations!.array[locationIdToListIndex[subLocationId]!],
+        assetIdToListIndex,
+        locationIdToListIndex)) {
+      return true;
+    }
+  }
+
+  for (var subAssetId in location.subAssetsIds) {
+    if (isEnergySensorOnSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subAssetId]!],
+        assetIdToListIndex)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool isCriticalSensorOnSubTreeOfLocations(
+    Location location,
+    Map<String, int> locationIdToListIndex,
+    Map<String, int> assetIdToListIndex) {
+  if (location.subAssetsIds.isEmpty && location.subLocationsIds.isEmpty) {
+    return false;
+  }
+
+  for (var subLocationId in location.subLocationsIds) {
+    if (isCriticalSensorOnSubTreeOfLocations(
+        rawListOfLocations!.array[locationIdToListIndex[subLocationId]!],
+        locationIdToListIndex,
+        assetIdToListIndex)) {
+      return true;
+    }
+  }
+
+  for (var subAssetId in location.subAssetsIds) {
+    if (isCriticalSensorOnSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subAssetId]!],
+        assetIdToListIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool isCriticalSensorOnSubTreeOfAssets(
+    Asset asset, Map<String, int> assetIdToListIndex) {
+  if (asset.getAssetStatus() == AssetStatus.alert) {
+    return true;
+  }
+  if (asset.subAssetsIds.isEmpty) {
+    return false;
+  }
+
+  for (var subAssetId in asset.subAssetsIds) {
+    if (isCriticalSensorOnSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subAssetId]!],
+        assetIdToListIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TreeViewNode? mountSubTreeOfAssets(
+    Asset asset, Map<String, int> assetIdToListIndex) {
+  if ((asset.subAssetsIds.isEmpty &&
+          onlyCriticalSensors &&
+          asset.getAssetStatus() != AssetStatus.alert) ||
+      asset.subAssetsIds.isEmpty &&
+          onlyEnergySensors &&
+          asset.sensorType != "energy") {
+    return null;
+  }
+
+  if (asset.subAssetsIds.isEmpty) {
+    return TreeViewNode(value: asset.name, leadingIcon: asset.getAssetIcon());
+  }
+
+  List<TreeViewNode> children = [];
+
+  for (var subassetId in asset.subAssetsIds) {
+    var subTree = mountSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subassetId]!],
+        assetIdToListIndex);
+    if (subTree == null) {
+      continue;
+    }
+    children.add(subTree);
+  }
+
+  return TreeViewNode(
+      value: asset.name, children: children, leadingIcon: asset.getAssetIcon());
+}
+
+TreeViewNode mountSubTreeFromLocation(
+    Location location,
+    Map<String, int> locationIdToListIndex,
+    Map<String, int> assetIdToListIndex) {
+  if (location.subLocationsIds.isEmpty && location.subAssetsIds.isEmpty) {
+    return TreeViewNode(
+        value: location.name,
+        leadingIcon: Image.asset("assets/location_icon.png"));
+  }
+
+  List<TreeViewNode> children = [];
+
+  for (var subLocationId in location.subLocationsIds) {
+    var _location =
+        rawListOfLocations!.array[locationIdToListIndex[subLocationId]!];
+    final hasCriticalSensor = isCriticalSensorOnSubTreeOfLocations(
+        _location, locationIdToListIndex, assetIdToListIndex);
+    final hasEnergySensor = isEnergySensorOnSubTreeOfLocations(
+        _location, assetIdToListIndex, locationIdToListIndex);
+
+    if (((!onlyCriticalSensors) ||
+            (onlyCriticalSensors && hasCriticalSensor)) &&
+        ((!onlyEnergySensors) || (onlyEnergySensors && hasEnergySensor))) {
+      var subTree = mountSubTreeFromLocation(
+          _location, locationIdToListIndex, assetIdToListIndex);
+      if (subTree.children == null) {
+        continue;
+      }
+      if (subTree.children!.isEmpty &&
+          (onlyEnergySensors || onlyCriticalSensors)) {
+        continue;
+      }
+
+      children.add(subTree);
+    }
+  }
+
+  for (var subAssetId in location.subAssetsIds) {
+    var subTree = mountSubTreeOfAssets(
+        rawListOfAssets!.array[assetIdToListIndex[subAssetId]!],
+        assetIdToListIndex);
+
+    if (subTree == null) {
+      continue;
+    }
+
+    children.add(subTree);
+  }
+
+  return TreeViewNode(
+      value: location.name,
+      children: children,
+      leadingIcon: Image.asset("assets/location_icon.png"));
 }
