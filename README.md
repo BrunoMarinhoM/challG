@@ -11,7 +11,8 @@ Demo:
 
 
 Ensure proper versioning:
-```Flutter 3.13.8 • channel stable • https://github.com/flutter/flutter.git
+```
+Flutter 3.13.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision nixpkgs000 () • 1970-01-01 00:00:00
 Engine • revision 767d8c75e8
 Tools • Dart 3.1.4 • DevTools 2.25.0
